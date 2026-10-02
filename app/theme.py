@@ -157,6 +157,23 @@ table.cmp td.lbl { color: var(--bbg-grey); text-transform: uppercase; font-size:
 table.cmp td.mk { white-space: nowrap; font-weight: 700; font-size: 0.78rem; }
 table.cmp tr.diff td.val { color: var(--bbg-red); }
 table.cmp tr.near td.val { color: var(--bbg-yellow); }
+
+/* Frozen decision bar: comment + buttons stay pinned to the bottom of the
+   viewport while the evidence above scrolls. Sticky goes on the keyed
+   container's stLayoutWrapper parent: that wrapper is exactly the bar's
+   height, so a sticky bar inside it would have no room to stick. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-decision_bar) {
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+  background-color: var(--bbg-bg);
+  border-top: 2px solid var(--bbg-amber);
+  padding: 4px 0 8px 0;
+  box-shadow: 0 -8px 16px rgba(0, 0, 0, 0.85);
+}
+.st-key-decision_bar { gap: 0.4rem; }
+.st-key-decision_bar [data-testid="stMarkdownContainer"] p { font-size: 0.8rem; margin-bottom: 0; }
+.st-key-decision_bar [data-testid="stHorizontalBlock"] { gap: 0.5rem; }
 </style>
 """
 

@@ -204,7 +204,7 @@ def render_nav_header(queue, item, status) -> None:
     pos = keys.index(item.key) + 1 if in_queue else None
     col_prev, col_mid, col_next = st.columns([1, 3, 1])
     with col_prev:
-        if st.button("‹ Previous", width="stretch", disabled=not in_queue or pos <= 1):
+        if st.button("‹ Previous", width="stretch", shortcut="Left", disabled=not in_queue or pos <= 1):
             app_state.move_relative(keys, -1)
             st.rerun()
     with col_mid:
@@ -214,7 +214,7 @@ def render_nav_header(queue, item, status) -> None:
             unsafe_allow_html=True,
         )
     with col_next:
-        if st.button("Next ›", width="stretch", disabled=in_queue and pos >= len(keys)):
+        if st.button("Next ›", width="stretch", shortcut="Right", disabled=in_queue and pos >= len(keys)):
             app_state.move_relative(keys, 1)
             st.rerun()
 
@@ -330,13 +330,12 @@ def drop_caption(item) -> str:
     rt = item.rtype
     left_ids = list(dict.fromkeys(l for l, _ in item.pairs))
     right_ids = list(dict.fromkeys(r for _, r in item.pairs))
-    unit = " (every tranche of that package)" if rt.id_field == "package_id" else ""
+    unit = " (all tranches)" if rt.id_field == "package_id" else ""
+    left, right = ui.side_label(rt.left_side), ui.side_label(rt.right_side)
     return (
-        f"- **Keep {ui.side_label(rt.left_side)}** (default): the pipeline drops {ui.side_label(rt.right_side)} "
-        f"`{', '.join(right_ids)}`{unit}.\n"
-        f"- **Keep {ui.side_label(rt.right_side)}**: drops {ui.side_label(rt.left_side)} `{', '.join(left_ids)}`{unit}.\n"
-        f"- Saves {len(item.pairs)} row{'s' if len(item.pairs) > 1 else ''} to "
-        f"`{rt.workbook}` › `{rt.sheet}`."
+        f"Keep **{left}** → drops {right} `{', '.join(right_ids)}`{unit} &nbsp;·&nbsp; "
+        f"Keep **{right}** → drops {left} `{', '.join(left_ids)}`{unit} &nbsp;·&nbsp; "
+        f"saves {len(item.pairs)} row{'s' if len(item.pairs) > 1 else ''}"
     )
 
 
@@ -373,29 +372,38 @@ def submit(item, choice, notes, queue, output_dir, reviewer, was_unsure) -> None
 
 
 def render_decision(item, status, queue, output_dir, reviewer) -> None:
+    """Pinned to the bottom of the viewport (theme.py styles the
+    st-key-decision_bar class Streamlit gives this keyed container), so
+    the comment box and buttons stay in reach while scrolling the evidence."""
     rt = item.rtype
-    st.divider()
-    st.markdown(drop_caption(item))
-
     nk = app_state.notes_key(item.key)
     if nk not in st.session_state:
         st.session_state[nk] = status.comment(item)
-    notes = st.text_area("Comment (saved to the comment column)", key=nk)
-
     was_unsure = status(item) == "unsure"
-    left, right = ui.side_label(rt.left_side), ui.side_label(rt.right_side)
-    b1, b2, b3, b4 = st.columns(4)
-    if b1.button(f"DUPLICATE — KEEP {left}", width="stretch"):
-        submit(item, "dup_left", notes, queue, output_dir, reviewer, was_unsure)
-    if b2.button(f"DUPLICATE — KEEP {right}", width="stretch"):
-        submit(item, "dup_right", notes, queue, output_dir, reviewer, was_unsure)
-    if b3.button("NOT A DUPLICATE", width="stretch"):
-        submit(item, "not_dup", notes, queue, output_dir, reviewer, was_unsure)
-    if b4.button("UNSURE", width="stretch"):
-        submit(item, "unsure", notes, queue, output_dir, reviewer, was_unsure)
-    if status(item) is not None:
-        if st.button("Clear decision (back to not reviewed)"):
-            submit(item, "clear", notes, queue, output_dir, reviewer, was_unsure)
+    with st.container(key="decision_bar"):
+        col_caption, col_clear = st.columns([5, 1], vertical_alignment="center")
+        col_caption.markdown(drop_caption(item))
+        if status(item) is not None and col_clear.button("Clear decision", type="tertiary"):
+            submit(item, "clear", st.session_state[nk], queue, output_dir, reviewer, was_unsure)
+
+        left, right = ui.side_label(rt.left_side), ui.side_label(rt.right_side)
+
+        col_notes, col_buttons = st.columns([2, 3])
+        with col_notes:
+            notes = st.text_area(
+                "Comment", key=nk, height=90, label_visibility="collapsed", placeholder="Comment (optional)"
+            )
+        with col_buttons:
+            b1, b2 = st.columns(2)
+            b3, b4 = st.columns(2)
+            if b1.button(f"DUPLICATE — KEEP {left}", width="stretch", shortcut="1"):
+                submit(item, "dup_left", notes, queue, output_dir, reviewer, was_unsure)
+            if b2.button(f"DUPLICATE — KEEP {right}", width="stretch", shortcut="2"):
+                submit(item, "dup_right", notes, queue, output_dir, reviewer, was_unsure)
+            if b3.button("NOT A DUPLICATE", width="stretch", shortcut="3"):
+                submit(item, "not_dup", notes, queue, output_dir, reviewer, was_unsure)
+            if b4.button("UNSURE", width="stretch", shortcut="4"):
+                submit(item, "unsure", notes, queue, output_dir, reviewer, was_unsure)
 
 
 def render_how_to_guide() -> None:
@@ -423,6 +431,11 @@ Confirming a package pair drops every tranche of the dropped package. If the tra
 - Score 2 is a strict rule (e.g. same ISIN and amount); 0–1 is the fuzzy multi-criteria rule, and closer to 1 means closer amounts and dates. Scores are triage, not the answer.
 - **Close competitor**: another candidate for the same deal scores within 0.1. **Deal in other suggestion**: the same deal id also appears in another pair or group — open it from the list and decide them together.
 - Bank overlap `3, 2, 5` means left names 3 parent banks, 2 are shared, right names 5. A 0 usually means the source names no lender.
+
+**Keyboard shortcuts**
+- `1` duplicate, keep left · `2` duplicate, keep right · `3` not a duplicate · `4` unsure
+- `←` / `→` previous / next item
+- Shortcuts are ignored while you're typing in the comment box: click outside it (or press Tab) first, then press the key. Clear decision has no shortcut on purpose.
 
 **Working alongside others**
 The workbooks are shared. Each save re-reads the file first so others' decisions are kept, but click **Reload from disk** to see their latest work, and close the workbook in Excel while the app is saving (it refuses to write while Excel has it open). Decisions show up in the pipeline dashboard after its next run.
