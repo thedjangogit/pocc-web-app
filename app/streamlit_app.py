@@ -21,6 +21,7 @@ import streamlit as st
 
 import config
 import data as app_data
+import public_data
 import state as app_state
 import theme
 import ui
@@ -301,6 +302,70 @@ def render_group(item) -> None:
     )
 
 
+_VERDICT_BOX = {"same": st.success, "different": st.error, "partial": st.info, "none": st.warning}
+_ID_TYPE_LABELS = {"ID_ISIN": "ISIN", "ID_CUSIP": "CUSIP", "ID_BB_8_CHR": "Bloomberg id"}
+
+
+def render_public_data(item) -> None:
+    flag = f"figi__{item.key}"
+    st.markdown("#### Public data")
+    if not st.session_state.get(flag):
+        st.button(
+            "Search public data (OpenFIGI)",
+            key=f"figi_btn__{item.key}",
+            shortcut="F",
+            on_click=st.session_state.__setitem__,
+            args=(flag, True),
+        )
+        st.caption(
+            "Looks up each side's ISIN, CUSIP and Bloomberg id in OpenFIGI: issuer, coupon/maturity description, "
+            "and whether both sides are the same security. Sends only those identifiers."
+        )
+        return
+
+    try:
+        with st.spinner("Querying OpenFIGI..."):
+            results = public_data.lookup(item)
+    except public_data.OpenFIGIError as e:
+        st.session_state[flag] = False
+        st.error(str(e))
+        return
+
+    level, message = public_data.verdict(item, results)
+    _VERDICT_BOX[level](message)
+    if results:
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "Side": [ui.side_label(j.side) for j, _ in results],
+                    "Deal": [j.deal_id + (" (tranche)" if j.role == "tranche" else "") for j, _ in results],
+                    "Looked up by": [f"{_ID_TYPE_LABELS.get(j.id_type, j.id_type)} {j.id_value}" for j, _ in results],
+                    "FIGI": [public_data.FIGI_PAGE_URL.format(figi=h["figi"]) if h else None for _, h in results],
+                    "Issuer": [h["name"] if h else "not found" for _, h in results],
+                    "Description": [(h["securityDescription"] or h["ticker"]) if h else None for _, h in results],
+                    "Type": [h["securityType"] if h else None for _, h in results],
+                    "Venue": [h["exchCode"] if h else None for _, h in results],
+                }
+            ),
+            hide_index=True,
+            width="stretch",
+            column_config={"FIGI": st.column_config.LinkColumn("FIGI", display_text=r"https://www\.openfigi\.com/id/(.*)")},
+        )
+        st.button(
+            "Append summary to comment",
+            key=f"figi_append__{item.key}",
+            on_click=append_to_comment,
+            args=(item.key, public_data.summary_line(item, results)),
+        )
+
+
+def append_to_comment(item_key: str, line: str) -> None:
+    """on_click callback, so it runs before the comment box is drawn."""
+    nk = app_state.notes_key(item_key)
+    current = (st.session_state.get(nk) or "").rstrip()
+    st.session_state[nk] = f"{current}\n{line}" if current else line
+
+
 def render_related(item, related, items_by_key, status) -> None:
     if not related:
         return
@@ -432,7 +497,11 @@ Confirming a package pair drops every tranche of the dropped package. If the tra
 - **Close competitor**: another candidate for the same deal scores within 0.1. **Deal in other suggestion**: the same deal id also appears in another pair or group — open it from the list and decide them together.
 - Bank overlap `3, 2, 5` means left names 3 parent banks, 2 are shared, right names 5. A 0 usually means the source names no lender.
 
+**Public data**
+**Search public data** (`F`) looks up each side's ISIN, CUSIP and Bloomberg id in OpenFIGI, Bloomberg's free security-identifier service. Same FIGI on both sides means the same security. The descriptions usually show coupon and maturity (and flag perpetuals). Different FIGIs usually mean different tranches, but one bond can have 144A and Reg S lines with separate identifiers. Dealogic loan packages have no public id, so loans resolve on the Bloomberg side only. Only the identifiers are sent; results are cached for a day.
+
 **Keyboard shortcuts**
+- `F` search public data
 - `1` duplicate, keep left · `2` duplicate, keep right · `3` not a duplicate · `4` unsure
 - `←` / `→` previous / next item
 - Shortcuts are ignored while you're typing in the comment box: click outside it (or press Tab) first, then press the key. Clear decision has no shortcut on purpose.
@@ -489,6 +558,7 @@ def main():
         render_group(item)
     else:
         render_pair(item)
+    render_public_data(item)
     render_related(item, related, items_by_key, status)
     render_decision(item, status, queue, output_dir, reviewer)
 
