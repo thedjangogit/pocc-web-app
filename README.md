@@ -19,9 +19,11 @@ From the repo root:
 .venv/bin/streamlit run app/streamlit_app.py
 ```
 
-- `input/` holds the pipeline's suggestion exports
-  (`pocc___bond_tranches_1_1_*.xlsx`, `..._1_n_*`, `pocc___loan_packages_1_1_*`).
-  The newest file per table is picked by default.
+- `input/` holds the pipeline's suggestion exports:
+  `pocc___bond_tranches_1_1_*`, `pocc___bond_tranches_1_n_*`,
+  `pocc___loan_packages_1_1_*`, `pocc___loan_tranches_1_1_*` and
+  `pocc___loan_tranches_1_n_*` (`.xlsx`). The newest file per table is
+  picked by default; a table with no file is simply skipped.
 - `output/` holds `validated_bond_duplicates.xlsx` and
   `validated_loan_duplicates.xlsx`. Both folders can be pointed elsewhere
   (e.g. the shared drive) under *Advanced: files & folders* in the sidebar.

@@ -105,20 +105,23 @@ class Status:
 
 
 def build_related_index(items):
-    """(sheet, side, id) -> item keys, to find other suggestions that touch
-    the same deal -- e.g. a tranche that is both in a 1-1 pair and a 1-N
-    group, or the 'close competitor' a has_close_competitor flag means."""
+    """(workbook, side, id) -> item keys, to find other suggestions that
+    touch the same deal -- e.g. a tranche that is both in a 1-1 pair and a
+    1-N group, a loan package whose tranches are suggested separately, or
+    the 'close competitor' a has_close_competitor flag means. Keyed on the
+    workbook rather than the tab so package and tranche tabs link up;
+    package ids and tranche ids never collide."""
     index = {}
     for item in items:
-        for side, deal_id in item.deals:
-            index.setdefault((item.rtype.workbook, item.rtype.sheet, side, deal_id), set()).add(item.key)
+        for side, deal_id in item.deals | item.tranche_deals:
+            index.setdefault((item.rtype.workbook, side, deal_id), set()).add(item.key)
     return index
 
 
 def related_keys(item, index) -> list[str]:
     keys = set()
-    for side, deal_id in item.deals:
-        keys |= index.get((item.rtype.workbook, item.rtype.sheet, side, deal_id), set())
+    for side, deal_id in item.deals | item.tranche_deals:
+        keys |= index.get((item.rtype.workbook, side, deal_id), set())
     keys.discard(item.key)
     return sorted(keys)
 

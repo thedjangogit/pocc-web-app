@@ -34,6 +34,9 @@ class Item:
     title: str
     row: dict | None = None  # pair kind
     rows: tuple[dict, ...] = ()  # group kind, pivot first
+    # Loan packages only: (side, tranche id) for each tranche in either
+    # package, so a package pair links to tranche suggestions for the same deal.
+    tranche_deals: frozenset[tuple[str, str]] = frozenset()
 
 
 def list_input_files(input_dir: str, pattern: str) -> list[str]:
@@ -81,6 +84,12 @@ def _pair_items(rtype: ReviewType, df: pd.DataFrame) -> list[Item]:
     for row in _records(df):
         left, right = str(row[rtype.left_col]), str(row[rtype.right_col])
         company = row.get(f"{rtype.left_side}_company") or row.get(f"{rtype.right_side}_company") or ""
+        tranche_deals = frozenset(
+            (side, line.split(" - ")[0].strip())
+            for side in (rtype.left_side, rtype.right_side)
+            for line in str(row.get(f"{side}_tranches") or "").splitlines()
+            if rtype.has_tranche_lists and line.strip()
+        )
         items.append(
             Item(
                 key=f"{rtype.key}:{left}|{right}",
@@ -94,6 +103,7 @@ def _pair_items(rtype: ReviewType, df: pd.DataFrame) -> list[Item]:
                 deals=frozenset({(rtype.left_side, left), (rtype.right_side, right)}),
                 title=f"{left} ↔ {right} — {company}",
                 row=row,
+                tranche_deals=tranche_deals,
             )
         )
     return items
