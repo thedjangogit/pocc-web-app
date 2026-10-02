@@ -461,14 +461,45 @@ def render_decision(item, status, queue, output_dir, reviewer) -> None:
         with col_buttons:
             b1, b2 = st.columns(2)
             b3, b4 = st.columns(2)
-            if b1.button(f"DUPLICATE — KEEP {left}", width="stretch", shortcut="1"):
+            if b1.button(f"DUPLICATE — KEEP {left}", key="decide_dup_left", width="stretch", shortcut="1"):
                 submit(item, "dup_left", notes, queue, output_dir, reviewer, was_unsure)
-            if b2.button(f"DUPLICATE — KEEP {right}", width="stretch", shortcut="2"):
+            if b2.button(f"DUPLICATE — KEEP {right}", key="decide_dup_right", width="stretch", shortcut="2"):
                 submit(item, "dup_right", notes, queue, output_dir, reviewer, was_unsure)
-            if b3.button("NOT A DUPLICATE", width="stretch", shortcut="3"):
+            if b3.button("NOT A DUPLICATE", key="decide_not_dup", width="stretch", shortcut="3"):
                 submit(item, "not_dup", notes, queue, output_dir, reviewer, was_unsure)
-            if b4.button("UNSURE", width="stretch", shortcut="4"):
+            if b4.button("UNSURE", key="decide_unsure", width="stretch", shortcut="4"):
                 submit(item, "unsure", notes, queue, output_dir, reviewer, was_unsure)
+
+
+# Streamlit's shortcut= matches by keyCode, and numpad digits send
+# different codes (97-100) than the top-row digits (49-52), so numpad 1-4
+# never fire the decision buttons on their own. This listener maps them to
+# the same keyed buttons, with the same rule Streamlit applies: ignored
+# while typing in a text field or when a modifier is held.
+_NUMPAD_BRIDGE = """
+<script>
+(() => {
+  if (window.__poccNumpadBridge) return;
+  window.__poccNumpadBridge = true;
+  const targets = {
+    Numpad1: "decide_dup_left",
+    Numpad2: "decide_dup_right",
+    Numpad3: "decide_not_dup",
+    Numpad4: "decide_unsure",
+  };
+  document.addEventListener("keydown", (e) => {
+    const key = targets[e.code];
+    if (!key || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+    const button = document.querySelector(`.st-key-${key} button`);
+    if (!button || button.disabled) return;
+    e.preventDefault();
+    button.click();
+  });
+})();
+</script>
+"""
 
 
 def render_how_to_guide() -> None:
@@ -502,7 +533,7 @@ Confirming a package pair drops every tranche of the dropped package. If the tra
 
 **Keyboard shortcuts**
 - `F` search public data
-- `1` duplicate, keep left · `2` duplicate, keep right · `3` not a duplicate · `4` unsure
+- `1` duplicate, keep left · `2` duplicate, keep right · `3` not a duplicate · `4` unsure (top-row or numpad digits)
 - `←` / `→` previous / next item
 - Shortcuts are ignored while you're typing in the comment box: click outside it (or press Tab) first, then press the key. Clear decision has no shortcut on purpose.
 
@@ -535,6 +566,7 @@ def main():
     queue = filter_queue(my_items, status, related_index)
     render_jump(queue, status)
 
+    st.html(_NUMPAD_BRIDGE, unsafe_allow_javascript=True)
     st.title("POCC — Duplicate Review")
     render_how_to_guide()
 
