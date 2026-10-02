@@ -1,0 +1,18 @@
+# Environment
+.venv/
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Data: pipeline exports and the shared validated workbooks live on the
+# shared drive, not in git.
+input/
+output/
+*.xlsx
+*.csv
+~$*
+.*.tmp
